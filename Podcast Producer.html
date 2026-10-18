@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podcast Producer</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e3e1dc;
+  --accent: #1db954; --accent-ink: #ffffff; --warn: #c2410c; --ok: #15803d; --track: #ecebe7;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121214; --panel: #1c1c1f; --text: #f2f2f3; --muted: #9b9ba3; --line: #2e2e33;
+          --accent: #1ed760; --accent-ink: #0b0b0c; --warn: #fb923c; --ok: #4ade80; --track: #2a2a2e; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.02em; }
+.sub { color: var(--muted); margin: 0 0 24px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+h2 { font-size: 15px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.drop { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1.5px dashed var(--line);
+  border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+.drop:hover, .drop.over { border-color: var(--accent); }
+.drop .lbl { font-weight: 600; min-width: 110px; }
+.drop .name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.drop .name.set { color: var(--text); }
+.drop button { flex: none; }
+.drop input { display: none; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+@media (max-width: 560px) { .grid { grid-template-columns: 1fr; } .drop .lbl { min-width: 0; } }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+label.f span.hint { font-size: 12px; }
+input[type=text], input[type=number], select { font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
+label.chk { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+button { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border: none; font-weight: 700;
+  padding: 13px 22px; font-size: 16px; border-radius: 999px; width: 100%; }
+button:disabled { opacity: .5; cursor: default; }
+details summary { cursor: pointer; color: var(--muted); font-size: 14px; margin-top: 4px; }
+details[open] summary { margin-bottom: 14px; }
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; color: var(--muted); }
+.steps li.active { color: var(--text); font-weight: 600; }
+.steps li.done { color: var(--text); }
+.steps li .ic { width: 18px; flex: none; text-align: center; }
+.steps li .det { margin-left: auto; font-weight: 400; font-size: 13px; color: var(--muted); text-align: right; }
+.bar { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; margin: 10px 0 4px; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.err { color: var(--warn); white-space: pre-wrap; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+.stat { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+.stat b { display: block; font-size: 18px; }
+.stat small { color: var(--muted); }
+.dl { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.dl a { text-decoration: none; background: var(--accent); color: var(--accent-ink); padding: 9px 16px;
+  border-radius: 999px; font-weight: 600; }
+.dl a.alt { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+audio { width: 100%; margin-top: 8px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Podcast Producer</h1>
+  <p class="sub">AIFF in → levelled, mono MP3 with intro &amp; outro out. Everything runs on this Mac; nothing is uploaded.</p>
+
+  <section>
+    <h2>1 · Files</h2>
+    <div class="drop" data-slot="episode">
+      <span class="lbl">Episode</span><span class="name">Drop your stereo AIFF here (or click)</span>
+      <input type="file" accept=".aif,.aiff,.aifc,.wav,audio/*">
+    </div>
+    <div class="drop" data-slot="intro">
+      <span class="lbl">Intro music</span><span class="name">Optional — AIFF, WAV, MP3, M4A</span>
+      <button type="button" class="clear hidden" title="Remove">✕</button>
+      <input type="file" accept="audio/*,.aif,.aiff">
+    </div>
+    <div class="drop" data-slot="outro">
+      <span class="lbl">Outro music</span><span class="name">Optional — AIFF, WAV, MP3, M4A</span>
+      <button type="button" class="clear hidden" title="Remove">✕</button>
+      <input type="file" accept="audio/*,.aif,.aiff">
+    </div>
+    <p class="sub" style="margin:6px 0 0;font-size:13px">Intro and outro are remembered for next time.</p>
+  </section>
+
+  <section>
+    <h2>2 · Settings</h2>
+    <div class="grid">
+      <label class="f">Episode title (used for file names)<input type="text" id="title" placeholder="Episode 1"></label>
+      <label class="f">Target loudness
+        <select id="target">
+          <option value="-16">−16 LUFS (podcast standard)</option>
+          <option value="-14">−14 LUFS (Spotify music level)</option>
+          <option value="-19">−19 LUFS (quieter, more dynamic)</option>
+        </select></label>
+      <label class="f">Reduce room echo on
+        <select id="echoCh">
+          <option value="off">Off</option>
+          <option value="0">Left channel</option>
+          <option value="1" selected>Right channel</option>
+          <option value="both">Both channels</option>
+        </select></label>
+      <label class="f">Echo reduction strength
+        <select id="echoStrength">
+          <option value="light">Light</option>
+          <option value="medium" selected>Medium</option>
+          <option value="strong">Strong</option>
+        </select></label>
+    </div>
+    <details>
+      <summary>More settings</summary>
+      <div class="grid">
+        <label class="f">Levelling strength <span class="hint" id="strengthVal"></span>
+          <input type="range" id="strength" min="0" max="100" value="70"></label>
+        <label class="f">Music level vs. voice (dB)
+          <input type="number" id="musicDb" value="-3" step="1" min="-20" max="6"></label>
+        <label class="f">Intro under first words (s) <span class="hint">intro dips when you start talking, then fades out</span>
+          <input type="number" id="introUnder" value="5" step="0.5" min="0" max="30"></label>
+        <label class="f">Outro under last words (s) <span class="hint">outro fades in quietly, then rises when you finish</span>
+          <input type="number" id="outroUnder" value="5" step="0.5" min="0" max="30"></label>
+        <label class="f">Music level under voice (dB) <span class="hint">how far the music dips while you talk</span>
+          <input type="number" id="duckDb" value="-12" step="1" min="-30" max="0"></label>
+        <label class="f">MP3 bitrate
+          <select id="kbps"><option selected>96</option><option>128</option><option>160</option><option>192</option></select></label>
+        <div></div>
+        <label class="chk"><input type="checkbox" id="gate" checked> Reduce background noise &amp; mic bleed between speech</label>
+        <label class="chk"><input type="checkbox" id="trim" checked> Trim silence at start and end</label>
+      </div>
+    </details>
+  </section>
+
+  <button class="primary" id="go" disabled>Produce episode</button>
+
+  <section id="progress" class="hidden" style="margin-top:16px">
+    <h2>Progress</h2>
+    <ul class="steps" id="steps"></ul>
+    <div class="bar"><div id="bar"></div></div>
+    <div id="error" class="err"></div>
+  </section>
+
+  <section id="results" class="hidden">
+    <h2>Ready for Spotify</h2>
+    <div class="stats" id="stats"></div>
+    <audio id="player" controls></audio>
+    <div class="dl" id="downloads"></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+<script type="module">
+// ───────────────────────────── helpers ─────────────────────────────
+const $ = (id) => document.getElementById(id);
+// Yield to the browser between work batches. MessageChannel isn't throttled like setTimeout
+// is in background tabs, so processing keeps full speed if you switch to another tab.
+const tickChannel = new MessageChannel(), tickQueue = [];
+tickChannel.port1.onmessage = () => tickQueue.shift()?.();
+const tick = () => new Promise((r) => { tickQueue.push(r); tickChannel.port2.postMessage(0); });
+const dbToLin = (db) => Math.pow(10, db / 20);
+const fmtTime = (s, ms = false) => {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  const base = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  return ms ? `${base},${String(Math.floor((s % 1) * 1000)).padStart(3, '0')}` : base;
+};
+const fmtDur = (s) => { const m = Math.floor(s / 60), x = Math.round(s % 60); return `${m}:${String(x).padStart(2, '0')}`; };
+const safeName = (s) => (s || 'Episode').replace(/[\/\\:*?"<>|]+/g, '-').trim() || 'Episode';
+
+// ───────────────────────────── AIFF reader ─────────────────────────────
+// Reads the header by walking chunks, then streams the sample data in slices
+// so an hour-long file never has to sit in memory twice.
+function readExtended80(dv, o) {
+  const exp = ((dv.getUint8(o) & 0x7f) << 8) | dv.getUint8(o + 1);
+  const hi = dv.getUint32(o + 2), lo = dv.getUint32(o + 6);
+  const sign = dv.getUint8(o) & 0x80 ? -1 : 1;
+  if (exp === 0 && hi === 0 && lo === 0) return 0;
+  return sign * (hi * 2 ** 32 + lo) * 2 ** (exp - 16383 - 63);
+}
+const fourcc = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+const readBytes = async (file, a, b) => new DataView(await file.slice(a, b).arrayBuffer());
+
+async function isAiff(file) {
+  if (file.size < 12) return false;
+  const dv = await readBytes(file, 0, 12);
+  return fourcc(dv, 0) === 'FORM' && ['AIFF', 'AIFC'].includes(fourcc(dv, 8));
+}
+
+async function readAiff(file, onProgress) {
+  const head = await readBytes(file, 0, 12);
+  const isAifc = fourcc(head, 8) === 'AIFC';
+  let comm = null, dataStart = -1, dataBytes = 0, pos = 12;
+  while (pos + 8 <= file.size) {
+    const h = await readBytes(file, pos, pos + 8);
+    const id = fourcc(h, 0), size = h.getUint32(4);
+    if (id === 'COMM') {
+      const c = await readBytes(file, pos + 8, pos + 8 + Math.min(size, 64));
+      comm = { channels: c.getInt16(0), frames: c.getUint32(2), bits: c.getInt16(6), rate: readExtended80(c, 8),
+               comp: isAifc && size >= 22 ? fourcc(c, 18) : 'NONE' };
+    } else if (id === 'SSND') {
+      const s = await readBytes(file, pos + 8, pos + 16);
+      dataStart = pos + 16 + s.getUint32(0);
+      dataBytes = size > 8 ? size - 8 - s.getUint32(0) : file.size - dataStart; // some recorders leave size at 0
+      if (comm) break;
+    }
+    pos += 8 + size + (size & 1);
+    if (size === 0 && id !== 'SSND') break;
+  }
+  if (!comm || dataStart < 0) throw new Error('This AIFF file is missing its format or audio data chunk.');
+
+  const comp = comm.comp.toLowerCase();
+  let kind, bytes;
+  if (comp === 'none' || comp === 'twos') { kind = 'be'; bytes = Math.ceil(comm.bits / 8); }
+  else if (comp === 'sowt') { kind = 'le'; bytes = Math.ceil(comm.bits / 8); }
+  else if (comp === 'fl32') { kind = 'f32'; bytes = 4; }
+  else if (comp === 'fl64') { kind = 'f64'; bytes = 8; }
+  else throw new Error(`Compressed AIFF-C ("${comm.comp}") isn't supported — please export as uncompressed AIFF or WAV.`);
+
+  const nch = comm.channels, frameBytes = nch * bytes;
+  dataBytes = Math.min(dataBytes, file.size - dataStart);
+  const frames = Math.min(comm.frames || Infinity, Math.floor(dataBytes / frameBytes));
+  const out = Array.from({ length: nch }, () => new Float32Array(frames));
+  const scale = 1 / 2 ** (bytes * 8 - 1);
+  const sliceFrames = Math.floor((16 << 20) / frameBytes);
+
+  for (let f0 = 0; f0 < frames; f0 += sliceFrames) {
+    const n = Math.min(sliceFrames, frames - f0);
+    const dv = await readBytes(file, dataStart + f0 * frameBytes, dataStart + (f0 + n) * frameBytes);
+    let o = 0;
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < nch; c++, o += bytes) {
+        let v;
+        if (kind === 'be' || kind === 'le') {
+          if (bytes === 2) v = dv.getInt16(o, kind === 'le');
+          else if (bytes === 3) {
+            v = kind === 'be'
+              ? (dv.getUint8(o) << 16) | (dv.getUint8(o + 1) << 8) | dv.getUint8(o + 2)
+              : (dv.getUint8(o + 2) << 16) | (dv.getUint8(o + 1) << 8) | dv.getUint8(o);
+            if (v & 0x800000) v -= 0x1000000;
+          } else if (bytes === 4) v = dv.getInt32(o, kind === 'le');
+          else v = dv.getInt8(o);
+          v *= scale;
+        } else v = kind === 'f32' ? dv.getFloat32(o) : dv.getFloat64(o);
+        out[c][f0 + i] = v;
+      }
+    }
+    onProgress?.((f0 + n) / frames);
+    await tick();
+  }
+  return { rate: comm.rate, channels: out };
+}
+
+// ───────────────────────────── decoding & resampling ─────────────────────────────
+async function resample(data, from, to) {
+  if (Math.abs(from - to) < 1) return data;
+  const len = Math.max(1, Math.round(data.length * to / from));
+  const ctx = new OfflineAudioContext(1, len, to);
+  const buf = ctx.createBuffer(1, data.length, from);
+  buf.copyToChannel(data, 0);
+  const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start();
+  return (await ctx.startRendering()).getChannelData(0);
+}
+
+// Loads any audio file. AIFF goes through our own reader; everything else uses the
+// browser decoder, which resamples to `rate` for us.
+async function loadAudio(file, rate, onProgress) {
+  if (await isAiff(file)) return readAiff(file, onProgress);
+  const ctx = new OfflineAudioContext(1, 1, rate);
+  const ab = await ctx.decodeAudioData(await file.arrayBuffer());
+  onProgress?.(1);
+  return { rate: ab.sampleRate, channels: Array.from({ length: ab.numberOfChannels }, (_, c) => ab.getChannelData(c)) };
+}
+
+function toMono(channels) {
+  if (channels.length === 1) return channels[0];
+  const out = new Float32Array(channels[0].length), k = 1 / channels.length;
+  for (const ch of channels) for (let i = 0; i < out.length; i++) out[i] += ch[i] * k;
+  return out;
+}
+
+// ───────────────────────────── loudness (ITU BS.1770 / LUFS) ─────────────────────────────
+function kWeightCoeffs(sr) {
+  let f0 = 1681.974450955533, G = 3.999843853973347, Q = 0.7071752369554196;
+  let K = Math.tan(Math.PI * f0 / sr);
+  const Vh = 10 ** (G / 20), Vb = Vh ** 0.4996667741545416, a0 = 1 + K / Q + K * K;
+  const s1 = [(Vh + Vb * K / Q + K * K) / a0, 2 * (K * K - Vh) / a0, (Vh - Vb * K / Q + K * K) / a0,
+              2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0];
+  f0 = 38.13547087602444; Q = 0.5003270373238773; K = Math.tan(Math.PI * f0 / sr);
+  const d = 1 + K / Q + K * K;
+  const s2 = [1, -2, 1, 2 * (K * K - 1) / d, (1 - K / Q + K * K) / d];
+  return [s1, s2];
+}
+
+// Streams audio through the K-weighting filter and records mean-square energy for every 100 ms.
+class EnergyMeter {
+  constructor(sr) {
+    this.hop = Math.round(sr * 0.1);
+    [this.s1, this.s2] = kWeightCoeffs(sr);
+    this.z = [0, 0, 0, 0]; this.acc = 0; this.n = 0; this.e = [];
+  }
+  push(x) {
+    const [b0, b1, b2, a1, a2] = this.s1, [c0, c1, c2, d1, d2] = this.s2;
+    let [z1, z2, w1, w2] = this.z, acc = this.acc, n = this.n;
+    const hop = this.hop, e = this.e;
+    for (let i = 0; i < x.length; i++) {
+      const v = x[i];
+      const y = b0 * v + z1; z1 = b1 * v - a1 * y + z2; z2 = b2 * v - a2 * y;
+      const k = c0 * y + w1; w1 = c1 * y - d1 * k + w2; w2 = c2 * y - d2 * k;
+      acc += k * k;
+      if (++n === hop) { e.push(acc / hop); acc = 0; n = 0; }
+    }
+    this.z = [z1, z2, w1, w2]; this.acc = acc; this.n = n;
+    return this;
+  }
+  get energies() { return Float64Array.from(this.e); }
+}
+const energyToLufs = (e) => (e > 0 ? -0.691 + 10 * Math.log10(e) : -Infinity);
+
+function integratedLufs(e) {
+  const blocks = [];
+  for (let j = 0; j + 4 <= e.length; j++) blocks.push((e[j] + e[j + 1] + e[j + 2] + e[j + 3]) / 4);
+  const abs = blocks.filter((b) => energyToLufs(b) > -70);
+  if (!abs.length) return -Infinity;
+  const rel = energyToLufs(abs.reduce((a, b) => a + b, 0) / abs.length) - 10;
+  const g = abs.filter((b) => energyToLufs(b) > rel);
+  return energyToLufs(g.reduce((a, b) => a + b, 0) / g.length);
+}
+
+// 400 ms window centred on each 100 ms frame
+function momentary(e) {
+  const m = new Float64Array(e.length);
+  for (let i = 0; i < e.length; i++) {
+    let s = 0, c = 0;
+    for (let j = i - 2; j <= i + 1; j++) if (j >= 0 && j < e.length) { s += e[j]; c++; }
+    m[i] = energyToLufs(s / c);
+  }
+  return m;
+}
+
+// ───────────────────────────── room-echo reduction ─────────────────────────────
+// Reverb tails decay roughly exponentially, so the "late" echo at any moment can be predicted
+// from what the spectrum looked like ~50 ms earlier. We subtract that prediction per frequency
+// band (spectral subtraction), leaving the direct voice and suppressing the ringing room.
+function makeFFT(n) {
+  const bits = Math.log2(n), rev = new Uint32Array(n);
+  for (let i = 0; i < n; i++) { let r = 0; for (let b = 0; b < bits; b++) r |= ((i >> b) & 1) << (bits - 1 - b); rev[i] = r; }
+  const cs = new Float64Array(n / 2), sn = new Float64Array(n / 2);
+  for (let i = 0; i < n / 2; i++) { cs[i] = Math.cos(2 * Math.PI * i / n); sn[i] = Math.sin(2 * Math.PI * i / n); }
+  return (re, im, inverse) => {
+    for (let i = 0; i < n; i++) {
+      const j = rev[i];
+      if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let size = 2; size <= n; size <<= 1) {
+      const half = size >> 1, stride = n / size;
+      for (let s = 0; s < n; s += size) {
+        for (let k = 0; k < half; k++) {
+          const wr = cs[k * stride], wi = inverse ? sn[k * stride] : -sn[k * stride];
+          const a = s + k, b = a + half;
+          const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+    }
+  };
+}
+
+const ECHO_PRESETS = {
+  light:  { rt60: 0.35, floorDb: -8,  eqDb: -1.5 },
+  medium: { rt60: 0.5,  floorDb: -12, eqDb: -2.5 },
+  strong: { rt60: 0.8,  floorDb: -18, eqDb: -3.5 },
+};
+
+// Gentle cut around 350 Hz, where small untreated rooms sound "boxy"
+function peakingEq(x, sr, f, gainDb, q = 1) {
+  const A = 10 ** (gainDb / 40), w = 2 * Math.PI * f / sr, cs = Math.cos(w), al = Math.sin(w) / (2 * q), a0 = 1 + al / A;
+  const b0 = (1 + al * A) / a0, b1 = -2 * cs / a0, b2 = (1 - al * A) / a0, a1 = b1, a2 = (1 - al / A) / a0;
+  let z1 = 0, z2 = 0;
+  for (let i = 0; i < x.length; i++) {
+    const v = x[i], y = b0 * v + z1; z1 = b1 * v - a1 * y + z2; z2 = b2 * v - a2 * y; x[i] = y;
+  }
+}
+
+// Processes x in place. Each frame only writes samples no later frame will read, so no copy is needed.
+async function reduceRoomEcho(x, sr, preset, onProgress) {
+  const { rt60, floorDb, eqDb } = ECHO_PRESETS[preset];
+  const N = sr > 32000 ? 1024 : 512, H = N / 4, bins = N / 2 + 1, fft = makeFFT(N);
+  const win = new Float64Array(N);
+  for (let i = 0; i < N; i++) win[i] = Math.sqrt(0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+  const D = Math.max(1, Math.round(0.05 * sr / H));                       // ~50 ms: where "early" ends and "late" echo begins
+  const decay = Math.exp(-2 * (3 * Math.LN10 / rt60) * D * H / sr);       // how much energy survives those 50 ms
+  const floor2 = 10 ** (floorDb / 10);
+  const hist = new Float64Array((D + 1) * bins), ps = new Float64Array(bins), gain = new Float64Array(bins);
+  const re = new Float64Array(N), im = new Float64Array(N), acc = new Float64Array(N);
+  const len = x.length, totalFrames = Math.ceil((len + N) / H);
+  let frame = 0;
+  for (let s = H - N; s < len; s += H, frame++) {
+    for (let i = 0; i < N; i++) { const p = s + i; re[i] = p >= 0 && p < len ? x[p] * win[i] : 0; im[i] = 0; }
+    fft(re, im, false);
+    const cur = (frame % (D + 1)) * bins, past = ((frame + 1) % (D + 1)) * bins;  // past = D frames ago
+    for (let k = 0; k < bins; k++) {
+      ps[k] = 0.5 * ps[k] + 0.5 * (re[k] * re[k] + im[k] * im[k]);
+      const late = frame > D ? decay * hist[past + k] : 0;
+      gain[k] = Math.sqrt(Math.max(floor2, 1 - late / (ps[k] + 1e-12)));
+    }
+    for (let k = 0; k < bins; k++) hist[cur + k] = ps[k];
+    for (let k = 0; k < bins; k++) {                                       // light smoothing across frequency
+      const g = (gain[Math.max(0, k - 1)] + 2 * gain[k] + gain[Math.min(bins - 1, k + 1)]) / 4;
+      re[k] *= g; im[k] *= g;
+      if (k > 0 && k < N / 2) { re[N - k] = re[k]; im[N - k] = -im[k]; }
+    }
+    fft(re, im, true);
+    for (let i = 0; i < N; i++) acc[i] += re[i] / N * win[i] * 0.5;        // sqrt-Hann² at 75% overlap sums to 2
+    for (let i = 0; i < H; i++) { const p = s + i; if (p >= 0 && p < len) x[p] = acc[i]; }
+    acc.copyWithin(0, H); acc.fill(0, N - H);
+    if (frame % 4000 === 0) { onProgress?.(frame / totalFrames); await tick(); }
+  }
+  peakingEq(x, sr, 350, eqDb);
+}
+
+// ───────────────────────────── per-channel leveller ─────────────────────────────
+function highpass(x, sr, f = 80) {
+  const w = 2 * Math.PI * f / sr, cs = Math.cos(w), al = Math.sin(w) / (2 * Math.SQRT1_2), a0 = 1 + al;
+  const b0 = (1 + cs) / 2 / a0, b1 = -(1 + cs) / a0, b2 = b0, a1 = -2 * cs / a0, a2 = (1 - al) / a0;
+  let z1 = 0, z2 = 0;
+  for (let i = 0; i < x.length; i++) {
+    const v = x[i], y = b0 * v + z1; z1 = b1 * v - a1 * y + z2; z2 = b2 * v - a2 * y; x[i] = y;
+  }
+}
+
+// Zero-phase one-pole smoothing (forward then backward) over the 100 ms frame track.
+function smooth(arr, tauSec) {
+  const a = Math.exp(-0.1 / tauSec);
+  for (let i = 1; i < arr.length; i++) arr[i] = a * arr[i - 1] + (1 - a) * arr[i];
+  for (let i = arr.length - 2; i >= 0; i--) arr[i] = a * arr[i + 1] + (1 - a) * arr[i];
+}
+
+const LEVEL_TARGET = -20;  // internal working level for each voice before final normalisation
+const MAX_DEVIATION = 10;  // most the leveller will push a passage up or down vs. the channel average (dB)
+
+function levelChannel(x, sr, { strength, gate, gateDepth = 12 }) {
+  highpass(x, sr);
+  const e = new EnergyMeter(sr).push(x).energies;
+  const I = integratedLufs(e);
+  if (!isFinite(I)) return { before: I, gainsDb: new Float64Array(e.length), active: new Uint8Array(e.length), e };
+  const mom = momentary(e);
+
+  // speech detection, widened by 300 ms each side so word starts/ends never get clipped
+  const raw = mom.map((m) => (m > Math.max(-60, I - 18) ? 1 : 0));
+  const active = new Uint8Array(e.length);
+  for (let i = 0; i < raw.length; i++) if (raw[i]) for (let j = Math.max(0, i - 3); j <= Math.min(raw.length - 1, i + 3); j++) active[j] = 1;
+
+  const staticGain = Math.max(-30, Math.min(30, LEVEL_TARGET - I));
+  const level = new Float64Array(e.length);
+  let last = NaN;
+  for (let i = 0; i < e.length; i++) {
+    if (raw[i]) last = staticGain + strength * Math.max(-MAX_DEVIATION, Math.min(MAX_DEVIATION, I - mom[i]));
+    level[i] = last;
+  }
+  const first = level.find((v) => !isNaN(v)) ?? staticGain;
+  for (let i = 0; i < level.length && isNaN(level[i]); i++) level[i] = first;
+  smooth(level, 1.2);
+
+  const gateTrack = new Float64Array(e.length);
+  if (gate) { for (let i = 0; i < e.length; i++) gateTrack[i] = active[i] ? 0 : -gateDepth; smooth(gateTrack, 0.08); }
+
+  const gainsDb = level.map((v, i) => v + gateTrack[i]);
+  applyGainTrack(x, gainsDb, Math.round(sr * 0.1));
+  return { before: I, gainsDb, active, e };
+}
+
+function applyGainTrack(x, gainsDb, hop) {
+  const g = gainsDb.map(dbToLin), last = g.length - 1;
+  for (let n = 0; n < x.length; n++) {
+    const p = n / hop - 0.5, i = Math.floor(p), f = p - i;
+    const a = g[Math.max(0, Math.min(last, i))], b = g[Math.max(0, Math.min(last, i + 1))];
+    x[n] *= a + (b - a) * f;
+  }
+}
+
+// ───────────────────────────── look-ahead peak limiter ─────────────────────────────
+// Sliding-window minimum of the required gain + a box filter the same length as the
+// look-ahead, which guarantees the gain is fully down by the time a peak arrives.
+class Limiter {
+  constructor(sr, ceilingDb = -1.5, lookMs = 5, releaseMs = 80) {
+    this.L = Math.max(1, Math.round(sr * lookMs / 1000)); this.N = this.L + 1;
+    this.ceil = dbToLin(ceilingDb); this.rel = 1 - Math.exp(-1 / (sr * releaseMs / 1000));
+    this.greq = new Float32Array(this.N); this.xbuf = new Float32Array(this.N);
+    this.cap = this.N + 1; this.dq = new Float64Array(this.cap); this.head = 0; this.len = 0;
+    this.box = new Float64Array(this.L).fill(1); this.boxSum = this.L;
+    this.g2 = 1; this.t = 0; this.minGain = 1;
+  }
+  process(input) {
+    const out = new Float32Array(input.length);
+    const { L, N, ceil, rel, greq, xbuf, dq, cap, box } = this;
+    let o = 0;
+    for (let i = 0; i < input.length; i++, this.t++) {
+      const t = this.t, x = input[i], a = Math.abs(x), gr = a > ceil ? ceil / a : 1;
+      greq[t % N] = gr; xbuf[t % N] = x;
+      while (this.len && greq[dq[(this.head + this.len - 1) % cap] % N] >= gr) this.len--;
+      dq[(this.head + this.len) % cap] = t; this.len++;
+      while (dq[this.head] < t - L) { this.head = (this.head + 1) % cap; this.len--; }
+      if (t < L) continue;
+      const n = t - L, g1 = greq[dq[this.head] % N];
+      this.g2 = g1 < this.g2 ? g1 : this.g2 + (g1 - this.g2) * rel;
+      this.boxSum += this.g2 - box[n % L]; box[n % L] = this.g2;
+      const g = this.boxSum / L;
+      if (g < this.minGain) this.minGain = g;
+      out[o++] = xbuf[n % N] * g;
+    }
+    return out.subarray(0, o);
+  }
+  flush() { return this.process(new Float32Array(this.L)); }
+}
+
+// ───────────────────────────── timeline (intro + episode + outro) ─────────────────────────────
+// Smooth S-curve from a to b as p goes 0 → 1
+const ease = (a, b, p) => a + (b - a) * (0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, p))));
+
+// Intro: full volume, dips to `duck` as the voice comes in, then fades to silence by the end of `under`.
+function introEnvelope(len, under, dip, duck) {
+  const k0 = len - under;
+  return (k) => k < k0 ? 1 : k < k0 + dip ? ease(1, duck, (k - k0) / dip) : ease(duck, 0, (k - k0 - dip) / (under - dip));
+}
+// Outro: fades in from silence to `duck` under the last words, then swells to full once the voice stops.
+function outroEnvelope(under, swell, duck) {
+  return (k) => k < under ? ease(0, duck, k / under) : ease(duck, 1, (k - under) / swell);
+}
+
+class Timeline {
+  constructor() { this.segs = []; this.length = 0; }
+  add(seg) { this.segs.push(seg); this.length = Math.max(this.length, seg.start + seg.len); }
+  read(pos, n) {
+    const out = new Float32Array(n);
+    for (const s of this.segs) {
+      const a = Math.max(pos, s.start), b = Math.min(pos + n, s.start + s.len);
+      for (let t = a; t < b; t++) {
+        const k = t - s.start;
+        let v = s.data[s.off + k] * s.gain;
+        if (s.env) v *= s.env(k);
+        if (k < s.fadeIn) v *= 0.5 - 0.5 * Math.cos(Math.PI * k / s.fadeIn);
+        const r = s.len - 1 - k;
+        if (r < s.fadeOut) v *= 0.5 - 0.5 * Math.cos(Math.PI * r / s.fadeOut);
+        out[t - pos] += v;
+      }
+    }
+    return out;
+  }
+}
+
+// ───────────────────────────── MP3 encoding ─────────────────────────────
+function floatToInt16(f) {
+  const out = new Int16Array(f.length);
+  for (let i = 0; i < f.length; i++) {
+    const d = (Math.random() - Math.random()) * 0.5;           // TPDF dither
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(f[i] * 32767 + d)));
+  }
+  return out;
+}
+
+// ───────────────────────────── UI: files & settings ─────────────────────────────
+const files = { episode: null, intro: null, outro: null };
+const SETTINGS = ['title', 'target', 'echoCh', 'echoStrength', 'strength', 'musicDb', 'introUnder', 'outroUnder', 'duckDb', 'kbps', 'gate', 'trim'];
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('podcast-producer-settings-v2') || '{}');
+    for (const k of SETTINGS) if (k in s && k !== 'title') { const el = $(k); el.type === 'checkbox' ? (el.checked = s[k]) : (el.value = s[k]); }
+  } catch {}
+  $('strengthVal').textContent = $('strength').value + '%';
+}
+function saveSettings() {
+  try {
+    const s = {}; for (const k of SETTINGS) { const el = $(k); s[k] = el.type === 'checkbox' ? el.checked : el.value; }
+    localStorage.setItem('podcast-producer-settings-v2', JSON.stringify(s));
+  } catch {}
+}
+document.querySelectorAll('input, select').forEach((el) => el.addEventListener('change', saveSettings));
+$('strength').addEventListener('input', () => ($('strengthVal').textContent = $('strength').value + '%'));
+
+// Intro/outro are kept in IndexedDB (File objects can be stored directly) so they persist.
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('podcast-producer', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function storeFile(slot, file) {
+  try { const db = await idb(); const tx = db.transaction('files', 'readwrite');
+        file ? tx.objectStore('files').put(file, slot) : tx.objectStore('files').delete(slot); } catch {}
+}
+async function restoreFile(slot) {
+  try { const db = await idb();
+        return await new Promise((res) => { const r = db.transaction('files').objectStore('files').get(slot);
+          r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); }); } catch { return null; }
+}
+
+function setFile(slot, file, persist = true) {
+  files[slot] = file;
+  const box = document.querySelector(`.drop[data-slot="${slot}"]`), name = box.querySelector('.name');
+  if (!box.dataset.placeholder) box.dataset.placeholder = name.textContent;
+  name.textContent = file ? `${file.name} · ${(file.size / 1048576).toFixed(1)} MB` : box.dataset.placeholder;
+  name.classList.toggle('set', !!file);
+  box.querySelector('.clear')?.classList.toggle('hidden', !file);
+  if (persist && slot !== 'episode') storeFile(slot, file);
+  if (slot === 'episode' && file && !$('title').value) $('title').value = file.name.replace(/\.[^.]+$/, '');
+  $('go').disabled = !files.episode;
+}
+
+document.querySelectorAll('.drop').forEach((box) => {
+  const slot = box.dataset.slot, input = box.querySelector('input');
+  box.addEventListener('click', (ev) => { if (!ev.target.closest('.clear')) input.click(); });
+  input.addEventListener('change', () => input.files[0] && setFile(slot, input.files[0]));
+  box.querySelector('.clear')?.addEventListener('click', () => { input.value = ''; setFile(slot, null); });
+  box.addEventListener('dragover', (ev) => { ev.preventDefault(); box.classList.add('over'); });
+  box.addEventListener('dragleave', () => box.classList.remove('over'));
+  box.addEventListener('drop', (ev) => { ev.preventDefault(); box.classList.remove('over');
+    if (ev.dataTransfer.files[0]) setFile(slot, ev.dataTransfer.files[0]); });
+});
+
+// ───────────────────────────── UI: progress ─────────────────────────────
+const STEP_NAMES = ['Read episode', 'Reduce room echo', 'Level each channel', 'Mix to mono & normalise', 'Add intro & outro', 'Encode MP3'];
+let stepEls = [];
+function resetSteps() {
+  $('steps').innerHTML = ''; $('error').textContent = '';
+  stepEls = STEP_NAMES.map((n) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="ic">○</span><span>${n}</span><span class="det"></span>`;
+    $('steps').appendChild(li); return li;
+  });
+}
+function step(i, detail = '', state = 'active') {
+  const li = stepEls[i]; if (!li) return;
+  li.className = state; li.querySelector('.ic').textContent = state === 'done' ? '✓' : state === 'active' ? '●' : '○';
+  if (detail !== null) li.querySelector('.det').textContent = detail;
+}
+const setBar = (p) => ($('bar').style.width = `${Math.max(0, Math.min(1, p)) * 100}%`);
+
+function stat(label, value) { return `<div class="stat"><small>${label}</small><b>${value}</b></div>`; }
+function addDownload(blob, name, label, alt = false) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.textContent = label; if (alt) a.className = 'alt';
+  $('downloads').appendChild(a); return a;
+}
+
+// ───────────────────────────── the pipeline ─────────────────────────────
+async function produce() {
+  saveSettings();
+  const opt = {
+    title: $('title').value.trim() || 'Episode', target: +$('target').value, strength: +$('strength').value / 100,
+    musicDb: +$('musicDb').value || 0, introUnder: Math.max(0, +$('introUnder').value || 0), outroUnder: Math.max(0, +$('outroUnder').value || 0),
+    duckDb: Math.min(0, +$('duckDb').value || 0),
+    kbps: +$('kbps').value, gate: $('gate').checked, trim: $('trim').checked,
+    echoCh: $('echoCh').value, echoStrength: $('echoStrength').value,
+  };
+  $('go').disabled = true; $('progress').classList.remove('hidden'); $('results').classList.add('hidden');
+  $('downloads').innerHTML = '';
+  resetSteps(); setBar(0);
+  let cur = 0;
+  try {
+    // 1 · read
+    step(cur = 0);
+    const ep = await loadAudio(files.episode, 44100, (p) => { setBar(p); step(0, `${Math.round(p * 100)}%`); });
+    let sr = ep.rate;
+    let chans = ep.channels.slice(0, 2);
+    if (sr !== 44100 && sr !== 48000) {
+      step(0, 'resampling…');
+      chans = await Promise.all(chans.map((c) => resample(c, sr, 44100))); sr = 44100;
+    }
+    const stereo = chans.length === 2;
+    step(0, `${fmtDur(chans[0].length / sr)} · ${stereo ? 'stereo' : 'mono'} · ${sr / 1000} kHz`, 'done');
+
+    // 1 · room-echo reduction (before levelling, so the leveller sees the cleaned-up voice)
+    step(cur = 1); setBar(0);
+    const echoTargets = opt.echoCh === 'off' ? [] : opt.echoCh === 'both' ? [0, 1] : [+opt.echoCh];
+    const echoChans = stereo ? echoTargets : echoTargets.length ? [0] : [];   // mono file: just treat the one channel
+    for (const [n, c] of echoChans.entries()) {
+      await reduceRoomEcho(chans[c], sr, opt.echoStrength, (p) => { setBar((n + p) / echoChans.length); step(1, `${Math.round((n + p) / echoChans.length * 100)}%`); });
+    }
+    step(1, echoChans.length ? `${opt.echoStrength} · ${echoChans.map((c) => (stereo ? (c ? 'right' : 'left') : 'mono')).join(' + ')}` : 'off', 'done');
+
+    // 2 · level each channel
+    step(cur = 2); setBar(0); await tick();
+    const lv = [];
+    for (let c = 0; c < chans.length; c++) {
+      lv.push(levelChannel(chans[c], sr, { strength: opt.strength, gate: opt.gate && stereo }));
+      setBar((c + 1) / chans.length); await tick();
+    }
+    const hop = Math.round(sr * 0.1);
+    const after = lv.map((l) => l.e.map((v, i) => v * dbToLin(l.gainsDb[i]) ** 2));
+    step(2, lv.map((l, c) => `${stereo ? (c ? 'R' : 'L') + ' ' : ''}${isFinite(l.before) ? l.before.toFixed(1) : '—'} → ${integratedLufs(after[c]).toFixed(1)} LUFS`).join(' · '), 'done');
+
+    // 3 · mono mix + trim + normalise
+    step(cur = 3); await tick();
+    const mono = chans[0];
+    if (stereo) { const r = chans[1]; for (let i = 0; i < mono.length; i++) mono[i] += r[i]; chans[1] = null; }
+    const nFrames = lv[0].active.length;
+    const activeAny = new Uint8Array(nFrames);
+    for (const l of lv) for (let i = 0; i < nFrames; i++) activeAny[i] |= l.active[i];
+    let f0 = 0, f1 = nFrames;
+    if (opt.trim) {
+      const first = activeAny.indexOf(1), last = activeAny.lastIndexOf(1);
+      if (first >= 0) { f0 = Math.max(0, first - 3); f1 = Math.min(nFrames, last + 8); }
+    }
+    const podOff = f0 * hop, podLen = Math.min(mono.length, f1 * hop) - podOff;
+    const podMono = mono.subarray(podOff, podOff + podLen);
+    const eMono = new EnergyMeter(sr).push(podMono).energies;
+    const podLufs = integratedLufs(eMono);
+    const podGain = isFinite(podLufs) ? dbToLin(opt.target - podLufs) : 1;
+    step(3, `${fmtDur(podLen / sr)} after trim`, 'done');
+
+    // 4 · intro / outro
+    step(cur = 4); await tick();
+    const loadMusic = async (file) => {
+      if (!file) return null;
+      const a = await loadAudio(file, sr);
+      const m = await resample(toMono(a.channels), a.rate, sr);
+      const L = integratedLufs(new EnergyMeter(sr).push(m).energies);
+      return { data: m, gain: isFinite(L) ? dbToLin(opt.target + opt.musicDb - L) : 1 };
+    };
+    const intro = await loadMusic(files.intro), outro = await loadMusic(files.outro);
+    const tl = new Timeline(), fadeShort = Math.round(sr * 0.02);
+    let podStart = 0;
+    const duck = dbToLin(opt.duckDb);
+    if (intro) {
+      const under = Math.min(Math.round(opt.introUnder * sr), Math.floor(intro.data.length / 2), podLen);  // keep at least half the intro at full volume
+      const dip = Math.min(Math.round(0.6 * sr), Math.floor(under / 2));
+      tl.add({ data: intro.data, off: 0, len: intro.data.length, start: 0, gain: intro.gain, fadeIn: 0, fadeOut: fadeShort,
+               env: under > 0 ? introEnvelope(intro.data.length, under, dip, duck) : null });
+      podStart = intro.data.length - under;
+    }
+    tl.add({ data: mono, off: podOff, len: podLen, start: podStart, gain: podGain, fadeIn: fadeShort, fadeOut: fadeShort });
+    if (outro) {
+      const under = Math.min(Math.round(opt.outroUnder * sr), Math.floor(outro.data.length / 2), podLen);  // leave room for the outro to swell
+      tl.add({ data: outro.data, off: 0, len: outro.data.length, start: podStart + podLen - under, gain: outro.gain, fadeIn: 0, fadeOut: fadeShort,
+               env: under > 0 ? outroEnvelope(under, Math.round(1.5 * sr), duck) : null });
+    }
+    // the music shifts the overall level, so measure the full mix and nudge everything to target
+    const mixMeter = new EnergyMeter(sr);
+    for (let p = 0; p < tl.length; p += sr * 10) mixMeter.push(tl.read(p, Math.min(sr * 10, tl.length - p)));
+    const mixLufs = integratedLufs(mixMeter.energies);
+    if (isFinite(mixLufs)) { const k = dbToLin(opt.target - mixLufs); for (const s of tl.segs) s.gain *= k; }
+    step(4, [intro && `intro ${fmtDur(intro.data.length / sr)}`, outro && `outro ${fmtDur(outro.data.length / sr)}`].filter(Boolean).join(' · ') || 'none added', 'done');
+
+    // 5 · limit + encode. A dry run through the limiter first tells us how much loudness
+    // peak-catching costs, so we can make it up before the real pass.
+    step(cur = 5, 'checking peaks…'); setBar(0);
+    const BLOCK = 1152 * 40, total = tl.length;
+    for (let pass = 0; pass < 2; pass++) {
+      const lim = new Limiter(sr), m = new EnergyMeter(sr);
+      for (let p = 0; p < total; p += BLOCK * 8) {
+        m.push(lim.process(tl.read(p, Math.min(BLOCK * 8, total - p))));
+        if (p % (BLOCK * 80) === 0) { setBar(p / total); await tick(); }
+      }
+      const diff = opt.target - integratedLufs(m.push(lim.flush()).energies);
+      if (!isFinite(diff) || Math.abs(diff) < 0.2) break;
+      for (const s of tl.segs) s.gain *= dbToLin(diff);
+    }
+    setBar(0);
+    const limiter = new Limiter(sr), meter = new EnergyMeter(sr);
+    const enc = new lamejs.Mp3Encoder(1, sr, opt.kbps), mp3 = [];
+    const encode = (f) => { meter.push(f); const b = enc.encodeBuffer(floatToInt16(f)); if (b.length) mp3.push(new Uint8Array(b)); };
+    for (let p = 0; p < total; p += BLOCK) {
+      encode(limiter.process(tl.read(p, Math.min(BLOCK, total - p))));
+      if ((p / BLOCK) % 20 === 0) { setBar(p / total); step(5, `${Math.round(p / total * 100)}%`); await tick(); }
+    }
+    encode(limiter.flush());
+    const tail = enc.flush(); if (tail.length) mp3.push(new Uint8Array(tail));
+    const mp3Blob = new Blob(mp3, { type: 'audio/mpeg' });
+    const finalLufs = integratedLufs(meter.energies);
+    step(5, `${(mp3Blob.size / 1048576).toFixed(1)} MB`, 'done'); setBar(1);
+
+    // results so far
+    const base = safeName(opt.title);
+    $('stats').innerHTML = stat('Length', fmtDur(total / sr)) + stat('Loudness', `${finalLufs.toFixed(1)} LUFS`)
+      + stat('Peak ceiling', '−1.5 dBFS') + stat('Format', `MP3 mono ${opt.kbps} kbps`);
+    $('player').src = URL.createObjectURL(mp3Blob);
+    addDownload(mp3Blob, `${base}.mp3`, '⬇ Download MP3');
+    $('results').classList.remove('hidden');
+  } catch (err) {
+    console.error(err);
+    step(cur, 'failed', 'active'); stepEls[cur].querySelector('.ic').textContent = '✕';
+    $('error').textContent = `Something went wrong: ${err.message || err}`;
+  } finally {
+    $('go').disabled = !files.episode;
+  }
+}
+$('go').addEventListener('click', produce);
+
+// test hook: lets an automated check feed files without the file picker
+window.__podcastProducer = { setFile, produce, reduceRoomEcho, readAiff, Limiter, integratedLufs, EnergyMeter };
+
+loadSettings();
+for (const slot of ['intro', 'outro']) restoreFile(slot).then((f) => f && setFile(slot, f, false));
+if (typeof lamejs === 'undefined') $('go').insertAdjacentHTML('afterend', '<p class="err">Couldn\'t load the MP3 encoder — check your internet connection and reload.</p>');
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Never upload audio by accident
+*.aif
+*.aiff
+*.aifc
+*.wav
+*.mp3
+*.m4a
+*.flac
+
+# Mac clutter
+.DS_Store
