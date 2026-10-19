@@ -27,3 +27,17 @@ Your intro, outro and settings are remembered between visits, in your own browse
 - Plain HTML and JavaScript, with no build step.
 - [lamejs](https://github.com/zhuker/lamejs) for MP3 encoding.
 - Audio processing (levelling, de-reverb, limiting) written from scratch. Loudness is measured to ITU-R BS.1770.
+
+---
+
+# Sun Finder
+
+`sun-finder.html` finds the closest place to you where the sun is out today.
+
+1. Click **Use my location**, or type a town or postcode.
+2. It checks the live forecast at about 150 points in rings around you, up to 100, 250 or 500 km away.
+3. It shows the nearest sunny spot, with distance, direction, cloud cover, hours of sun left and sunset time, plus a map and a **Get directions** link.
+
+Choose **Right now** (clear sky at this moment) or **Rest of today** (mostly sunny until sunset).
+
+Weather comes from [Open-Meteo](https://open-meteo.com/) and place names from [BigDataCloud](https://www.bigdatacloud.com/); neither needs an API key. Open it from the GitHub Pages link (`…/sun-finder.html`) so your browser lets it ask for your location.
