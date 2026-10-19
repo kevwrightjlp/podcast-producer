@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sun Finder</title>
+<meta name="description" content="Find the closest place to you where the sun is out today.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: one column. Answer card first, then map, then the ranked list. */
+:root {
+  --sky: #eaf3fb;
+  --surface: #ffffff;
+  --ink: #12263a;
+  --muted: #557089;
+  --line: #d3e2ef;
+  --sun: #f5b301;
+  --sun-ink: #7a4f00;
+  --sun-soft: #fff4cf;
+  --cloud: #9aabbb;
+  --you: #2f6fd6;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sky: #0d1823;
+    --surface: #152433;
+    --ink: #e6eef6;
+    --muted: #93a9bd;
+    --line: #26394c;
+    --sun: #ffc93a;
+    --sun-ink: #ffd666;
+    --sun-soft: #2e2711;
+    --cloud: #6c7f91;
+    --you: #6aa1ff;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--sky);
+  color: var(--ink);
+  font: 16px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+}
+main { max-width: 760px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; align-items: center; gap: 14px; }
+.sun-mark {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle, var(--sun) 55%, transparent 57%);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--sun) 25%, transparent);
+}
+h1 { font: 800 clamp(28px, 6vw, 40px)/1.05 var(--display); margin: 0; letter-spacing: -0.02em; }
+.tag { margin: 2px 0 0; color: var(--muted); }
+
+.controls {
+  display: grid; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+}
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+label.small { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+button, select, input[type="text"] {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+}
+input[type="text"] { flex: 1 1 200px; min-width: 0; }
+button { cursor: pointer; font-weight: 700; }
+button.primary { background: var(--sun); border-color: var(--sun); color: #2b1d00; }
+button:hover { filter: brightness(1.04); }
+button:disabled { opacity: 0.55; cursor: progress; }
+:focus-visible { outline: 3px solid var(--you); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; font-weight: 400; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); font-weight: 700; }
+
+#status { color: var(--muted); min-height: 1.5em; margin: 0; }
+#status.error { color: #c0392b; }
+
+.answer {
+  background: var(--sun-soft); border: 1px solid color-mix(in srgb, var(--sun) 45%, transparent);
+  border-radius: 16px; padding: 20px; display: grid; gap: 6px;
+}
+.answer.none { background: var(--surface); border-color: var(--line); }
+.answer .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sun-ink); }
+.answer.none .eyebrow { color: var(--muted); }
+.answer h2 { font: 800 clamp(26px, 6vw, 38px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+.answer .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.answer .facts b { color: var(--ink); }
+.answer a.go {
+  justify-self: start; margin-top: 8px; text-decoration: none; font-weight: 700;
+  background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 10px;
+}
+
+#map { height: 340px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); z-index: 0; }
+
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.list h3 { margin: 0; padding: 12px 16px; font: 700 13px var(--body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--line); }
+.list ol { list-style: none; margin: 0; padding: 0; }
+.list li {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid var(--line);
+}
+.list li:last-child { border-bottom: 0; }
+.list li .name { min-width: 0; }
+.list li .name a { color: var(--ink); font-weight: 700; text-decoration: none; }
+.list li .name a:hover { text-decoration: underline; }
+.list li .sub { font-size: 14px; color: var(--muted); }
+.list li .dist { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.dot.sunny { background: var(--sun); color: #2b1d00; }
+.dot.partly { background: linear-gradient(135deg, var(--sun) 50%, var(--cloud) 50%); }
+.dot.cloudy { background: var(--cloud); }
+
+footer { color: var(--muted); font-size: 13px; }
+footer a { color: inherit; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="sun-mark" aria-hidden="true"></div>
+    <div>
+      <h1>Sun Finder</h1>
+      <p class="tag">The closest place to you where the sun is out today.</p>
+    </div>
+  </header>
+
+  <section class="controls" aria-label="Search settings">
+    <div class="row">
+      <button class="primary" id="locate">Use my location</button>
+      <input type="text" id="place" placeholder="…or type a town or postcode" aria-label="Town or postcode">
+      <button id="search">Search</button>
+    </div>
+    <div class="row">
+      <span>
+        <label class="small" for="when">When</label><br>
+        <span class="seg" id="when" role="group" aria-label="When">
+          <button data-when="now" aria-pressed="true">Right now</button>
+          <button data-when="later" aria-pressed="false">Rest of today</button>
+        </span>
+      </span>
+      <span>
+        <label class="small" for="radius">Search up to</label><br>
+        <select id="radius">
+          <option value="100">100 km / 60 mi</option>
+          <option value="250" selected>250 km / 155 mi</option>
+          <option value="500">500 km / 310 mi</option>
+        </select>
+      </span>
+      <span>
+        <label class="small" for="units">Units</label><br>
+        <select id="units">
+          <option value="mi">Miles</option>
+          <option value="km">Kilometres</option>
+        </select>
+      </span>
+    </div>
+    <p id="status" role="status">Share your location or type a place to start.</p>
+  </section>
+
+  <section id="answer" class="answer none" aria-live="polite">
+    <span class="eyebrow">How it works</span>
+    <h2>Checks the sky in about 150 places around you</h2>
+    <div class="facts"><span>Cloud cover from the live forecast, for right now or for the rest of today's daylight.</span></div>
+  </section>
+
+  <div id="map" aria-label="Map of checked places"></div>
+
+  <section class="list" id="listWrap" hidden>
+    <h3 id="listTitle">Nearest sunny places</h3>
+    <ol id="list"></ol>
+  </section>
+
+  <footer>
+    Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.
+    Place names: <a href="https://www.bigdatacloud.com/" target="_blank" rel="noopener">BigDataCloud</a>.
+    Map: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors.
+    Your location is only sent to these services to look up the weather.
+  </footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const state = { when: "now", origin: null, results: null };
+
+// Default to miles for US/UK/Liberia/Myanmar locales.
+try {
+  const region = (navigator.language || "").split("-")[1] || "";
+  $("units").value = ["US", "GB", "LR", "MM"].includes(region.toUpperCase()) ? "mi" : "km";
+} catch (e) {}
+
+// ---------- Map ----------
+let map = null, layer = null;
+if (window.L) {
+  map = L.map("map", { scrollWheelZoom: false }).setView([30, 0], 2);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18, attribution: "© OpenStreetMap"
+  }).addTo(map);
+  layer = L.layerGroup().addTo(map);
+} else {
+  $("map").hidden = true;
+}
+
+// ---------- Geometry ----------
+const R = 6371;
+const rad = (d) => d * Math.PI / 180, deg = (r) => r * 180 / Math.PI;
+function distanceKm(a, b) {
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function destination(o, km, bearingDeg) {
+  const d = km / R, b = rad(bearingDeg), p1 = rad(o.lat), l1 = rad(o.lon);
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+  const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return { lat: deg(p2), lon: ((deg(l2) + 540) % 360) - 180 };
+}
+function bearing(a, b) {
+  const y = Math.sin(rad(b.lon - a.lon)) * Math.cos(rad(b.lat));
+  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lon - a.lon));
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+const compass = (b) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(b / 45) % 8];
+
+// Rings of points, denser near the middle, about 150 in total at any radius.
+function buildGrid(origin, maxKm) {
+  const pts = [{ ...origin, km: 0, bearing: 0 }];
+  const rings = 10;
+  for (let i = 1; i <= rings; i++) {
+    const km = maxKm * Math.pow(i / rings, 1.3);
+    const n = Math.min(20, 6 + i * 2);
+    const offset = (i % 2) * (180 / n);
+    for (let j = 0; j < n; j++) {
+      const b = offset + j * 360 / n;
+      pts.push({ ...destination(origin, km, b), km, bearing: b });
+    }
+  }
+  return pts;
+}
+
+// ---------- Formatting ----------
+function fmtDist(km) {
+  const mi = $("units").value === "mi";
+  const v = mi ? km * 0.621371 : km;
+  if (v < 1) return "here";
+  return `${Math.round(v)} ${mi ? "mi" : "km"}`;
+}
+function fmtTemp(c) {
+  const f = $("units").value === "mi";
+  return f ? `${Math.round(c * 9 / 5 + 32)}°F` : `${Math.round(c)}°C`;
+}
+function setStatus(msg, isError) {
+  $("status").textContent = msg;
+  $("status").classList.toggle("error", !!isError);
+}
+
+// ---------- Weather ----------
+async function fetchWeather(points) {
+  const out = [];
+  const batchSize = 50;
+  for (let i = 0; i < points.length; i += batchSize) {
+    const batch = points.slice(i, i + batchSize);
+    const params = new URLSearchParams({
+      latitude: batch.map((p) => p.lat.toFixed(3)).join(","),
+      longitude: batch.map((p) => p.lon.toFixed(3)).join(","),
+      current: "cloud_cover,weather_code,is_day,temperature_2m",
+      hourly: "sunshine_duration,is_day,cloud_cover",
+      daily: "sunset",
+      forecast_days: "1",
+      timezone: "auto"
+    });
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!res.ok) throw new Error(`Weather service replied ${res.status}`);
+    let data = await res.json();
+    if (!Array.isArray(data)) data = [data];
+    data.forEach((d, k) => out.push({ ...batch[k], w: d }));
+    setStatus(`Checking the sky… ${Math.min(i + batchSize, points.length)} of ${points.length} places`);
+  }
+  return out;
+}
+
+// Classify a point as sunny / partly / cloudy for the chosen time window.
+function classify(p, when) {
+  const c = p.w.current, h = p.w.hourly;
+  const idx = Math.max(0, h.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13)));
+  let daylightLeft = 0, sunLeft = 0;
+  for (let k = idx; k < h.time.length; k++) {
+    if (h.is_day[k]) { daylightLeft++; sunLeft += (h.sunshine_duration[k] || 0) / 3600; }
+  }
+  p.isDay = !!c.is_day;
+  p.cloud = c.cloud_cover;
+  p.temp = c.temperature_2m;
+  p.sunHours = sunLeft;
+  p.daylightLeft = daylightLeft;
+  p.sunset = p.w.daily && p.w.daily.sunset ? p.w.daily.sunset[0].slice(11, 16) : null;
+  if (when === "now") {
+    if (!p.isDay) p.sky = "dark";
+    else if (c.cloud_cover <= 25 && c.weather_code <= 1) p.sky = "sunny";
+    else if (c.cloud_cover <= 60 && c.weather_code <= 2) p.sky = "partly";
+    else p.sky = "cloudy";
+  } else {
+    if (daylightLeft === 0) p.sky = "dark";
+    else if (sunLeft >= Math.max(1, daylightLeft * 0.6)) p.sky = "sunny";
+    else if (sunLeft >= Math.max(0.5, daylightLeft * 0.3)) p.sky = "partly";
+    else p.sky = "cloudy";
+  }
+  return p;
+}
+
+// ---------- Place names ----------
+const nameCache = new Map();
+async function placeName(p) {
+  const key = `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`;
+  if (nameCache.has(key)) return nameCache.get(key);
+  let name = null;
+  try {
+    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${p.lat}&longitude=${p.lon}&localityLanguage=en`);
+    if (res.ok) {
+      const d = await res.json();
+      const town = d.city || d.locality;
+      const region = d.principalSubdivision || d.countryName;
+      name = town ? (region && region !== town ? `${town}, ${region}` : town) : (region || null);
+    }
+  } catch (e) {}
+  nameCache.set(key, name);
+  return name;
+}
+
+// ---------- Run ----------
+async function run(origin) {
+  state.origin = origin;
+  const buttons = [$("locate"), $("search")];
+  buttons.forEach((b) => (b.disabled = true));
+  try {
+    const maxKm = Number($("radius").value);
+    const pts = buildGrid(origin, maxKm);
+    setStatus(`Checking the sky in ${pts.length} places…`);
+    state.results = await fetchWeather(pts);
+    await render();
+  } catch (e) {
+    setStatus(`Couldn't get the weather: ${e.message}. Check your connection and try again.`, true);
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+async function render() {
+  if (!state.results) return;
+  const origin = state.origin;
+  const all = state.results.map((p) => classify(p, state.when));
+  all.forEach((p) => { p.dist = distanceKm(origin, p); p.dir = compass(bearing(origin, p)); });
+  all.sort((a, b) => a.dist - b.dist);
+
+  const here = all[0];
+  const sunny = all.filter((p) => p.sky === "sunny");
+  const partly = all.filter((p) => p.sky === "partly");
+  const candidates = (sunny.length ? sunny : partly).slice(0, 14);
+  if (candidates.length) {
+    setStatus("Looking up place names…");
+    await Promise.all(candidates.map(async (p) => { p.name = await placeName(p); }));
+  }
+  // Neighbouring points often fall in the same town; keep the nearest of each.
+  const seen = new Set();
+  const top = candidates.filter((p) => {
+    if (!p.name) return true;
+    if (seen.has(p.name)) return false;
+    seen.add(p.name);
+    return true;
+  }).slice(0, 6);
+
+  drawMap(all, origin, top[0]);
+
+  const ans = $("answer");
+  const whenText = state.when === "now" ? "right now" : "for the rest of today";
+
+  if (all.every((p) => p.sky === "dark")) {
+    ans.className = "answer none";
+    ans.innerHTML = `<span class="eyebrow">The sun has set</span>
+      <h2>It's dark everywhere within ${fmtDist(Number($("radius").value))}</h2>
+      <div class="facts"><span>Try again after sunrise tomorrow.</span></div>`;
+    $("listWrap").hidden = true;
+    setStatus(`Checked ${all.length} places.`);
+    return;
+  }
+
+  if (!top.length) {
+    ans.className = "answer none";
+    ans.innerHTML = `<span class="eyebrow">No sun found</span>
+      <h2>It's cloudy everywhere within ${fmtDist(Number($("radius").value))} ${whenText}</h2>
+      <div class="facts"><span>Try a bigger search area${state.when === "now" ? ", or switch to “Rest of today”" : ""}.</span></div>`;
+    $("listWrap").hidden = true;
+    setStatus(`Checked ${all.length} places.`);
+    return;
+  }
+
+  const best = top[0];
+  const isHere = best === here && best.dist < 1;
+  const label = sunny.length ? "Sunny" : "Partly sunny (closest thing to sun)";
+  const name = isHere ? "Right where you are" : (best.name || `${best.lat.toFixed(2)}, ${best.lon.toFixed(2)}`);
+
+  ans.className = "answer";
+  ans.innerHTML = `
+    <span class="eyebrow">${label} ${whenText}</span>
+    <h2></h2>
+    <div class="facts">
+      ${isHere ? "" : `<span><b>${fmtDist(best.dist)}</b> ${best.dir} as the crow flies</span>`}
+      <span><b>${best.cloud}%</b> cloud now</span>
+      <span><b>${best.sunHours.toFixed(1)} h</b> of sun left today</span>
+      <span><b>${fmtTemp(best.temp)}</b></span>
+      ${best.sunset ? `<span>Sunset <b>${best.sunset}</b></span>` : ""}
+    </div>
+    ${isHere ? "" : `<a class="go" target="_blank" rel="noopener" href="${directionsUrl(origin, best)}">Get directions</a>`}`;
+  ans.querySelector("h2").textContent = name;
+
+  $("listTitle").textContent = sunny.length ? "Nearest sunny places" : "Nearest partly sunny places";
+  const ol = $("list");
+  ol.innerHTML = "";
+  top.forEach((p, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="dot ${p.sky}">${i + 1}</span>
+      <div class="name"><a target="_blank" rel="noopener" href="${directionsUrl(origin, p)}"></a>
+        <div class="sub">${p.cloud}% cloud · ${p.sunHours.toFixed(1)} h sun left · ${fmtTemp(p.temp)}</div></div>
+      <span class="dist">${p.dist < 1 ? "here" : `${fmtDist(p.dist)} ${p.dir}`}</span>`;
+    li.querySelector("a").textContent = p.name || `${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}`;
+    ol.appendChild(li);
+  });
+  $("listWrap").hidden = false;
+  setStatus(`Checked ${all.length} places · ${sunny.length} sunny ${whenText}.`);
+}
+
+function directionsUrl(o, p) {
+  return `https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lon}&destination=${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+}
+
+function drawMap(all, origin, best) {
+  if (!map) return;
+  layer.clearLayers();
+  const css = getComputedStyle(document.documentElement);
+  const colors = {
+    sunny: css.getPropertyValue("--sun").trim(),
+    partly: "#f0d27a",
+    cloudy: css.getPropertyValue("--cloud").trim(),
+    dark: "#3a4a5a"
+  };
+  all.forEach((p) => {
+    L.circleMarker([p.lat, p.lon], {
+      radius: p === best ? 11 : 6, weight: p === best ? 3 : 1,
+      color: p === best ? "#12263a" : "#ffffff", fillColor: colors[p.sky], fillOpacity: 0.9
+    }).bindTooltip(`${fmtDist(p.dist)} ${p.dir} · ${p.cloud}% cloud · ${p.sunHours.toFixed(1)} h sun left`).addTo(layer);
+  });
+  L.circleMarker([origin.lat, origin.lon], {
+    radius: 8, weight: 3, color: "#ffffff", fillColor: css.getPropertyValue("--you").trim(), fillOpacity: 1
+  }).bindTooltip("You").addTo(layer);
+  map.fitBounds(L.latLngBounds(all.map((p) => [p.lat, p.lon])), { padding: [16, 16] });
+}
+
+// ---------- Inputs ----------
+$("locate").addEventListener("click", () => {
+  if (!navigator.geolocation) { setStatus("This browser can't share your location. Type a place instead.", true); return; }
+  setStatus("Finding you…");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => run({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+    () => setStatus("Location wasn't shared. Type a town or postcode instead.", true),
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 }
+  );
+});
+
+async function searchPlace() {
+  const q = $("place").value.trim();
+  if (!q) { $("place").focus(); return; }
+  setStatus(`Looking up “${q}”…`);
+  try {
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(q)}`);
+    const d = await res.json();
+    const hit = d.results && d.results[0];
+    if (!hit) { setStatus(`Couldn't find “${q}”. Try a nearby town name.`, true); return; }
+    run({ lat: hit.latitude, lon: hit.longitude });
+  } catch (e) {
+    setStatus("Couldn't look up that place. Check your connection and try again.", true);
+  }
+}
+$("search").addEventListener("click", searchPlace);
+$("place").addEventListener("keydown", (e) => { if (e.key === "Enter") searchPlace(); });
+
+$("when").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-when]");
+  if (!b) return;
+  state.when = b.dataset.when;
+  $("when").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  render();
+});
+$("radius").addEventListener("change", () => { if (state.origin) run(state.origin); });
+$("units").addEventListener("change", render);
+</script>
+</body>
+</html>
