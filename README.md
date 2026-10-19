@@ -35,9 +35,11 @@ Your intro, outro and settings are remembered between visits, in your own browse
 `sun-finder.html` finds the closest place in mainland UK (England, Scotland and Wales) where the sun is out today.
 
 1. Click **Use my location**, or type a town or postcode.
-2. It checks the live forecast at points across the mainland around you, up to 50, 100 or 200 miles away, or anywhere in mainland UK. Points at sea, on the islands or in Northern Ireland are skipped.
+2. It checks the live forecast every mile or so around you, up to 5, 10, 15, 25 or 50 miles away. Points at sea, on the islands or in Northern Ireland are skipped.
 3. It shows the nearest sunny spot, with distance, direction, cloud cover, hours of sun left, temperature in °C and sunset time, plus a map and a **Get directions** link.
 
 Choose **Right now** (clear sky at this moment) or **Rest of today** (mostly sunny until sunset).
+
+If nowhere nearby is sunny, it tells you when the sun is next expected (later today or tomorrow), where it arrives first, and when it reaches you.
 
 Weather comes from [Open-Meteo](https://open-meteo.com/) and place names from [BigDataCloud](https://www.bigdatacloud.com/); neither needs an API key. Open it from the GitHub Pages link (`…/sun-finder.html`) so your browser lets it ask for your location.

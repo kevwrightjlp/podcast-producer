@@ -151,10 +151,11 @@ footer a { color: inherit; }
       <span>
         <label class="small" for="radius">Search up to</label><br>
         <select id="radius">
-          <option value="80">50 miles</option>
-          <option value="160" selected>100 miles</option>
-          <option value="320">200 miles</option>
-          <option value="1100">Anywhere in mainland UK</option>
+          <option value="8.05">5 miles</option>
+          <option value="16.09">10 miles</option>
+          <option value="24.14" selected>15 miles</option>
+          <option value="40.23">25 miles</option>
+          <option value="80.47">50 miles</option>
         </select>
       </span>
       <span>
@@ -170,7 +171,7 @@ footer a { color: inherit; }
 
   <section id="answer" class="answer none" aria-live="polite">
     <span class="eyebrow">How it works</span>
-    <h2>Checks the sky in hundreds of places across mainland UK</h2>
+    <h2>Checks the sky every mile or so around you</h2>
     <div class="facts"><span>Cloud cover from the live forecast, for right now or for the rest of today's daylight.</span></div>
   </section>
 
@@ -268,7 +269,7 @@ const compass = (b) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(b
 // Evenly spaced rings of points around the origin, keeping only those on mainland UK.
 function buildGrid(origin, maxKm) {
   const pts = [{ ...origin, km: 0, bearing: 0 }];
-  const step = Math.min(Math.max(maxKm / 8, 12), 25);
+  const step = Math.min(Math.max(maxKm / 8, 1.5), 8);
   for (let km = step; km <= maxKm; km += step) {
     const n = Math.max(6, Math.round(2 * Math.PI * km / step));
     const offset = (Math.round(km / step) % 2) * (180 / n);
@@ -285,14 +286,20 @@ function buildGrid(origin, maxKm) {
 function fmtDist(km) {
   const mi = $("units").value === "mi";
   const v = mi ? km * 0.621371 : km;
-  if (v < 1) return "here";
-  return `${Math.round(v)} ${mi ? "mi" : "km"}`;
+  if (v < 0.5) return "here";
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${mi ? "mi" : "km"}`;
 }
 const fmtTemp = (c) => `${Math.round(c)}°C`;
-const fmtRadius = () => {
-  const v = Number($("radius").value);
-  return v > 1000 ? "mainland UK" : `${fmtDist(v)} of you`;
-};
+const fmtRadius = () => `${$("radius").selectedOptions[0].textContent} of you`;
+// "from 14:00" for later today, "tomorrow from 09:00" for tomorrow.
+function fmtSunFrom(p) {
+  const t = p.nextSun;
+  return t.slice(0, 10) === p.w.current.time.slice(0, 10) ? `from ${t.slice(11, 16)}` : `tomorrow from ${t.slice(11, 16)}`;
+}
+function hereText(here) {
+  if (here.sky === "sunny") return state.when === "now" ? "sunny now" : "sunny for the rest of today";
+  return here.nextSun ? `sun ${fmtSunFrom(here)}` : "no sun forecast before the day after tomorrow";
+}
 function setStatus(msg, isError) {
   $("status").textContent = msg;
   $("status").classList.toggle("error", !!isError);
@@ -310,7 +317,7 @@ async function fetchWeather(points) {
       current: "cloud_cover,weather_code,is_day,temperature_2m",
       hourly: "sunshine_duration,is_day,cloud_cover",
       daily: "sunset",
-      forecast_days: "1",
+      forecast_days: "2",
       timezone: "auto"
     });
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
@@ -327,9 +334,15 @@ async function fetchWeather(points) {
 function classify(p, when) {
   const c = p.w.current, h = p.w.hourly;
   const idx = Math.max(0, h.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13)));
+  const today = c.time.slice(0, 10);
   let daylightLeft = 0, sunLeft = 0;
-  for (let k = idx; k < h.time.length; k++) {
+  for (let k = idx; k < h.time.length && h.time[k].slice(0, 10) === today; k++) {
     if (h.is_day[k]) { daylightLeft++; sunLeft += (h.sunshine_duration[k] || 0) / 3600; }
+  }
+  // First coming hour (after this one) that is mostly sunshine with little cloud.
+  p.nextSun = null;
+  for (let k = idx + 1; k < h.time.length; k++) {
+    if (h.is_day[k] && h.sunshine_duration[k] >= 2700 && h.cloud_cover[k] <= 40) { p.nextSun = h.time[k]; break; }
   }
   p.isDay = !!c.is_day;
   p.cloud = c.cloud_cover;
@@ -401,8 +414,9 @@ async function render() {
 
   const here = all[0];
   const sunny = all.filter((p) => p.sky === "sunny");
-  const partly = all.filter((p) => p.sky === "partly");
-  const candidates = (sunny.length ? sunny : partly).slice(0, 14);
+  // With no sun now, rank by how soon the sun arrives, then by distance.
+  const later = all.filter((p) => p.nextSun).sort((a, b) => a.nextSun.localeCompare(b.nextSun) || a.dist - b.dist);
+  const candidates = (sunny.length ? sunny : later).slice(0, 14);
   if (candidates.length) {
     setStatus("Looking up place names…");
     await Promise.all(candidates.map(async (p) => { p.name = await placeName(p); }));
@@ -421,55 +435,67 @@ async function render() {
   const ans = $("answer");
   const whenText = state.when === "now" ? "right now" : "for the rest of today";
 
-  if (all.every((p) => p.sky === "dark")) {
-    ans.className = "answer none";
-    ans.innerHTML = `<span class="eyebrow">The sun has set</span>
-      <h2>It's dark everywhere within ${fmtRadius()}</h2>
-      <div class="facts"><span>Try again after sunrise tomorrow.</span></div>`;
-    $("listWrap").hidden = true;
-    setStatus(`Checked ${all.length} places.`);
-    return;
-  }
+  const label = (p) => p.name || `${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}`;
 
   if (!top.length) {
+    const dark = all.every((p) => p.sky === "dark");
     ans.className = "answer none";
-    ans.innerHTML = `<span class="eyebrow">No sun found</span>
-      <h2>It's cloudy everywhere within ${fmtRadius()} ${whenText}</h2>
-      <div class="facts"><span>Try a bigger search area${state.when === "now" ? ", or switch to “Rest of today”" : ""}.</span></div>`;
+    ans.innerHTML = `<span class="eyebrow">${dark ? "The sun has set" : `No sun ${whenText}`}</span>
+      <h2>No sun forecast within ${fmtRadius()} before the day after tomorrow</h2>
+      <div class="facts"><span>${$("radius").selectedIndex < $("radius").options.length - 1 ? "Try a bigger distance." : "Check again later; forecasts change."}</span></div>`;
     $("listWrap").hidden = true;
     setStatus(`Checked ${all.length} places.`);
     return;
   }
 
   const best = top[0];
-  const isHere = best === here && best.dist < 1;
-  const label = sunny.length ? "Sunny" : "Partly sunny (closest thing to sun)";
-  const name = isHere ? "Right where you are" : (best.name || `${best.lat.toFixed(2)}, ${best.lon.toFixed(2)}`);
-
-  ans.className = "answer";
-  ans.innerHTML = `
-    <span class="eyebrow">${label} ${whenText}</span>
-    <h2></h2>
-    <div class="facts">
-      ${isHere ? "" : `<span><b>${fmtDist(best.dist)}</b> ${best.dir} as the crow flies</span>`}
-      <span><b>${best.cloud}%</b> cloud now</span>
-      <span><b>${best.sunHours.toFixed(1)} h</b> of sun left today</span>
-      <span><b>${fmtTemp(best.temp)}</b></span>
-      ${best.sunset ? `<span>Sunset <b>${best.sunset}</b></span>` : ""}
-    </div>
-    ${isHere ? "" : `<a class="go" target="_blank" rel="noopener" href="${directionsUrl(origin, best)}">Get directions</a>`}`;
-  ans.querySelector("h2").textContent = name;
-
-  $("listTitle").textContent = sunny.length ? "Nearest sunny places" : "Nearest partly sunny places";
+  const isHere = best === here && best.dist < 0.8;
   const ol = $("list");
   ol.innerHTML = "";
+
+  if (sunny.length) {
+    ans.className = "answer";
+    ans.innerHTML = `
+      <span class="eyebrow">Sunny ${whenText}</span>
+      <h2></h2>
+      <div class="facts">
+        ${isHere ? "" : `<span><b>${fmtDist(best.dist)}</b> ${best.dir} as the crow flies</span>`}
+        <span><b>${best.cloud}%</b> cloud now</span>
+        <span><b>${best.sunHours.toFixed(1)} h</b> of sun left today</span>
+        <span><b>${fmtTemp(best.temp)}</b></span>
+        ${best.sunset ? `<span>Sunset <b>${best.sunset}</b></span>` : ""}
+        ${isHere ? "" : `<span>Where you are: <b>${hereText(here)}</b></span>`}
+      </div>
+      ${isHere ? "" : `<a class="go" target="_blank" rel="noopener" href="${directionsUrl(origin, best)}">Get directions</a>`}`;
+    ans.querySelector("h2").textContent = isHere ? "Right where you are" : label(best);
+    $("listTitle").textContent = "Nearest sunny places";
+  } else {
+    // Nowhere is sunny yet: say when and where the sun arrives first.
+    const dark = all.every((p) => p.sky === "dark");
+    ans.className = "answer";
+    ans.innerHTML = `
+      <span class="eyebrow">${dark ? "The sun has set" : `No sun ${whenText} within ${fmtRadius()}`}</span>
+      <h2>Sun expected ${fmtSunFrom(best)}</h2>
+      <div class="facts">
+        <span>First at <b class="first"></b>${isHere ? "" : `, ${fmtDist(best.dist)} ${best.dir}`}</span>
+        ${isHere ? "" : `<span>Where you are: <b>${hereText(here)}</b></span>`}
+        ${dark ? "" : `<span><b>${best.cloud}%</b> cloud there now</span>`}
+      </div>
+      ${isHere ? "" : `<a class="go" target="_blank" rel="noopener" href="${directionsUrl(origin, best)}">Get directions</a>`}`;
+    ans.querySelector(".first").textContent = isHere ? "your location" : label(best);
+    $("listTitle").textContent = "Earliest sun nearby";
+  }
+
   top.forEach((p, i) => {
     const li = document.createElement("li");
+    const sub = sunny.length
+      ? `${p.cloud}% cloud · ${p.sunHours.toFixed(1)} h sun left · ${fmtTemp(p.temp)}`
+      : `Sun ${fmtSunFrom(p)} · ${p.isDay ? `${p.cloud}% cloud now · ` : ""}${fmtTemp(p.temp)}`;
     li.innerHTML = `<span class="dot ${p.sky}">${i + 1}</span>
       <div class="name"><a target="_blank" rel="noopener" href="${directionsUrl(origin, p)}"></a>
-        <div class="sub">${p.cloud}% cloud · ${p.sunHours.toFixed(1)} h sun left · ${fmtTemp(p.temp)}</div></div>
-      <span class="dist">${p.dist < 1 ? "here" : `${fmtDist(p.dist)} ${p.dir}`}</span>`;
-    li.querySelector("a").textContent = p.name || `${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}`;
+        <div class="sub">${sub}</div></div>
+      <span class="dist">${p.dist < 0.8 ? "here" : `${fmtDist(p.dist)} ${p.dir}`}</span>`;
+    li.querySelector("a").textContent = label(p);
     ol.appendChild(li);
   });
   $("listWrap").hidden = false;
