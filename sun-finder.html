@@ -314,7 +314,7 @@ async function fetchWeather(points) {
     const params = new URLSearchParams({
       latitude: batch.map((p) => p.lat.toFixed(3)).join(","),
       longitude: batch.map((p) => p.lon.toFixed(3)).join(","),
-      current: "cloud_cover,weather_code,is_day,temperature_2m",
+      current: "cloud_cover,weather_code,is_day,temperature_2m,direct_normal_irradiance",
       hourly: "sunshine_duration,is_day,cloud_cover",
       daily: "sunset",
       forecast_days: "2",
@@ -339,10 +339,10 @@ function classify(p, when) {
   for (let k = idx; k < h.time.length && h.time[k].slice(0, 10) === today; k++) {
     if (h.is_day[k]) { daylightLeft++; sunLeft += (h.sunshine_duration[k] || 0) / 3600; }
   }
-  // First coming hour (after this one) that is mostly sunshine with little cloud.
+  // First coming hour (after this one) with at least half an hour of sunshine.
   p.nextSun = null;
   for (let k = idx + 1; k < h.time.length; k++) {
-    if (h.is_day[k] && h.sunshine_duration[k] >= 2700 && h.cloud_cover[k] <= 40) { p.nextSun = h.time[k]; break; }
+    if (h.is_day[k] && h.sunshine_duration[k] >= 1800) { p.nextSun = h.time[k]; break; }
   }
   p.isDay = !!c.is_day;
   p.cloud = c.cloud_cover;
@@ -351,9 +351,13 @@ function classify(p, when) {
   p.daylightLeft = daylightLeft;
   p.sunset = p.w.daily && p.w.daily.sunset ? p.w.daily.sunset[0].slice(11, 16) : null;
   if (when === "now") {
+    // Sunshine is direct sunlight above 120 W/m² (the WMO definition), so sun between
+    // scattered clouds counts. Low cloud also counts, for just after sunrise and before
+    // sunset, when the sun is too low to reach 120 W/m² even in a clear sky.
+    const dni = c.direct_normal_irradiance ?? 0;
     if (!p.isDay) p.sky = "dark";
-    else if (c.cloud_cover <= 25 && c.weather_code <= 1) p.sky = "sunny";
-    else if (c.cloud_cover <= 60 && c.weather_code <= 2) p.sky = "partly";
+    else if (dni >= 120 || c.cloud_cover <= 40) p.sky = "sunny";
+    else if (dni >= 30 || c.cloud_cover <= 70) p.sky = "partly";
     else p.sky = "cloudy";
   } else {
     if (daylightLeft === 0) p.sky = "dark";
